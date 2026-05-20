@@ -22,6 +22,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include <string.h>
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -60,6 +62,26 @@ static void MX_USART2_UART_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+void OLED_DrawCursor(uint8_t x, uint8_t page)
+{
+	if (x > 120) x = 120;
+	if (page > 7) page = 7;
+
+	uint8_t set_window_cmds[] = {
+		0x21, // Set Column Address
+		x,   // X-Start
+		x + 7,   // X-End
+		0x22, // Set Page Address
+		page,    // Y-Start
+		page     // Y-End
+	};
+
+	HAL_I2C_Mem_Write(&hi2c1, (0x3C << 1), 0x00, 1, set_window_cmds, sizeof(set_window_cmds), 100);
+	uint8_t block_data[8];
+	memset(block_data, 0xFF, sizeof(block_data));
+	HAL_I2C_Mem_Write(&hi2c1, (0x3C << 1), 0x40, 1, block_data, sizeof(block_data), 100);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -95,17 +117,23 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  uint8_t oled_adress = 8;
+  uint8_t init_cmds[] = {
+        0xAE, // Display OFF
+        0x20, 0x00, // Memory Addressing Mode: Horizontal
+        0x81, 0xFF, // max contrast
+        0xA1, // Segment Remap (mirror x axis)
+        0xC8, // COM Output Scan Direction (mirror y axis)
+        0x8D, 0x14, // Charge Pump
+        0xAF  // Display ON
+    };
 
-  for(uint8_t i = 1; i < 128; i++)
-  {
-	  HAL_StatusTypeDef result = HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(i<<1), 3, 100);
+  HAL_I2C_Mem_Write(&hi2c1, (0x3C << 1), 0x00, 1, init_cmds, sizeof(init_cmds), 100);
 
-	  if(result == HAL_OK) {
-		  oled_adress = i;
-		  break;
-	  }
-  }
+  uint8_t zero_buffer[1024];
+  memset(zero_buffer, 0, sizeof(zero_buffer));
+  HAL_I2C_Mem_Write(&hi2c1, (0x3C << 1), 0x40, 1, zero_buffer, sizeof(zero_buffer), 100);
+
+  OLED_Draw_Cursor(60, 3);
 
   /* USER CODE END 2 */
 
