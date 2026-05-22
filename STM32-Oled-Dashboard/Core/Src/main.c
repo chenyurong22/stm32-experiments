@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 
 #include <string.h>
+#include <stdio.h>
 
 /* USER CODE END Includes */
 
@@ -65,6 +66,46 @@ static void MX_ADC1_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+const uint8_t mini_font[15][5] = {
+    {0x00, 0x00, 0x00, 0x00, 0x00}, // Index 0: ' '
+    {0x7E, 0x11, 0x11, 0x11, 0x7E}, // Index 1: 'A'
+    {0x7F, 0x49, 0x49, 0x49, 0x36}, // Index 2: 'B'
+    {0x3E, 0x41, 0x41, 0x41, 0x22}, // Index 3: 'C'
+	{0x7F, 0x41, 0x41, 0x22, 0x1C}, // Index 4: 'D'
+    {0x3E, 0x51, 0x49, 0x45, 0x3E}, // Index 4: '0'
+    {0x00, 0x42, 0x7F, 0x40, 0x00}, // Index 5: '1'
+    {0x42, 0x61, 0x51, 0x49, 0x46}, // Index 6: '2'
+    {0x21, 0x41, 0x45, 0x4B, 0x31}, // Index 7: '3'
+    {0x18, 0x14, 0x12, 0x7F, 0x10}, // Index 8: '4'
+    {0x27, 0x45, 0x45, 0x45, 0x39}, // Index 9: '5'
+    {0x3C, 0x4A, 0x49, 0x49, 0x30}, // Index 10: '6'
+    {0x01, 0x71, 0x09, 0x05, 0x03}, // Index 11: '7'
+    {0x36, 0x49, 0x49, 0x49, 0x36}, // Index 12: '8'
+    {0x06, 0x49, 0x49, 0x29, 0x1E}  // Index 13: '9'
+};
+
+void OLED_DrawChar(char character, uint8_t x, uint8_t page)
+{
+	uint8_t index = 0;
+	if (character == ' ') index = 0;
+	else if (character >= 'A' && character <= 'D') index = (character - 'A') + 1;
+	else if (character >= '0' && character <= '9') index = (character - '0') + 5;
+	else return;
+
+	uint8_t set_window_cmds[] = {
+		0x21, x, x + 4,
+		0x22, page, page
+	};
+	HAL_I2C_Mem_Write(&hi2c1, (0x3C << 1), 0x00, 1, set_window_cmds, sizeof(set_window_cmds), 100);
+
+	uint8_t char_data[5];
+	for (int i = 0; i < 5; i++) {
+		char_data[i] = mini_font[index][i];
+	}
+
+	HAL_I2C_Mem_Write(&hi2c1, (0x3C << 1), 0x40, 1, char_data, sizeof(char_data), 100);
+}
+
 void OLED_DrawCursor(uint8_t x, uint8_t page, uint8_t color)
 {
 	if (x > 120) x = 120;
@@ -83,6 +124,18 @@ void OLED_DrawCursor(uint8_t x, uint8_t page, uint8_t color)
 	uint8_t block_data[8];
 	memset(block_data, color, sizeof(block_data));
 	HAL_I2C_Mem_Write(&hi2c1, (0x3C << 1), 0x40, 1, block_data, sizeof(block_data), 100);
+}
+
+void OLED_Print(char* str, uint8_t x, uint8_t page) {
+    int i = 0;
+
+    while (str[i] != '\0') {
+        OLED_DrawChar(str[i], x, page);
+        x += 6;
+        i++;
+
+        if (x > 122) break;
+    }
 }
 
 /* USER CODE END 0 */
@@ -133,6 +186,11 @@ int main(void)
 
   HAL_I2C_Mem_Write(&hi2c1, (0x3C << 1), 0x00, 1, init_cmds, sizeof(init_cmds), 100);
 
+  uint8_t reset_window[] = {
+	0x21, 0, 127,
+	0x22, 0, 7
+  };
+  HAL_I2C_Mem_Write(&hi2c1, (0x3C << 1), 0x00, 1, reset_window, sizeof(reset_window), 100);
   uint8_t zero_buffer[1024];
   memset(zero_buffer, 0, sizeof(zero_buffer));
   HAL_I2C_Mem_Write(&hi2c1, (0x3C << 1), 0x40, 1, zero_buffer, sizeof(zero_buffer), 100);
@@ -142,27 +200,42 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  uint8_t old_x_pos = 60;
+  ADC_ChannelConfTypeDef sConfig = {0};
 
   while (1)
   {
+	  sConfig.Channel = ADC_CHANNEL_0;
+	  sConfig.Rank = 1;
+	  sConfig.SamplingTime = ADC_SAMPLETIME_15CYCLES;
+	  HAL_ADC_ConfigChannel(&hadc1, &sConfig);
+
 	  HAL_ADC_Start(&hadc1);
+	  HAL_ADC_PollForConversion(&hadc1, 10);
+	  uint32_t adc_x = HAL_ADC_GetValue(&hadc1);
 
-	  if(HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK)
-	  {
-		  uint32_t adc_val = HAL_ADC_GetValue(&hadc1);
-		  uint8_t new_x_pos = (adc_val * 120) / 4095;
+	  sConfig.Channel = ADC_CHANNEL_4;
+	  HAL_ADC_ConfigChannel(&hadc1, &sConfig);
 
-		  int diff = new_x_pos - old_x_pos;
-		  if(diff > 1 || diff < -1)
-		  {
-			  OLED_DrawCursor(old_x_pos, 3, 0x00);
-			  OLED_DrawCursor(new_x_pos, 3, 0xFF);
-			  old_x_pos = new_x_pos;
-		  }
-	  }
+	  HAL_ADC_Start(&hadc1);
+	  HAL_ADC_PollForConversion(&hadc1, 10);
+	  uint32_t adc_y = HAL_ADC_GetValue(&hadc1);
 
-	  HAL_Delay(20);
+	  uint8_t btn_val = HAL_GPIO_ReadPin(JOYSTICK_BTN_GPIO_Port, JOYSTICK_BTN_Pin);
+
+	  char str_x[20];
+	  char str_y[20];
+	  char str_btn[20];
+
+	  sprintf(str_x, "X: %lu    ", adc_x);
+	  sprintf(str_y, "Y: %lu    ", adc_y);
+	  sprintf(str_btn, "BTN: %d  ", btn_val);
+
+	  OLED_Print(str_x, 10, 1);
+	  OLED_Print(str_y, 10, 3);
+	  OLED_Print(str_btn, 10, 5);
+
+	  HAL_Delay(50);
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
