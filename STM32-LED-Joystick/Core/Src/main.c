@@ -53,6 +53,7 @@ UART_HandleTypeDef huart2;
 
 uint8_t led_data[MAX_LED][3];
 uint32_t pwm_data[(MAX_LED * 24) + 50];
+uint32_t adc_values[2];
 
 /* USER CODE END PV */
 
@@ -138,18 +139,29 @@ int main(void) {
 	MX_TIM3_Init();
 	/* USER CODE BEGIN 2 */
 
-	HAL_ADC_Start_IT(&hadc1);
-
-	Set_LED(0, 255, 0, 0);
-	WS2812_Send();
-
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
 	/* USER CODE BEGIN WHILE */
 	while (1) {
 		HAL_ADC_Start_IT(&hadc1);
-		HAL_Delay(50);
+		HAL_Delay(20);
+
+		uint32_t x_val = adc_values[0];
+		uint8_t active_led = x_val / 512;
+
+		if (active_led >= MAX_LED) {
+			active_led = MAX_LED - 1;
+		}
+
+		for(int i = 0; i < MAX_LED; i++)
+		{
+			Set_LED(i, 0, 0, 0);
+		}
+
+		Set_LED(active_led, 255, 0, 0);
+		WS2812_Send();
+
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
@@ -398,7 +410,6 @@ static void MX_GPIO_Init(void) {
 
 /* USER CODE BEGIN 4 */
 
-uint32_t adc_values[2];
 uint8_t current_channel = 0;
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
