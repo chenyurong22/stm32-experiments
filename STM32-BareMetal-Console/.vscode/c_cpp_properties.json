@@ -1,0 +1,11 @@
+{
+    "configurations": [
+        {
+            "name": "STM32 Bare Metal",
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "compilerPath": "arm-none-eabi-gcc",
+            "intelliSenseMode": "gcc-arm"
+        }
+    ],
+    "version": 4
+}
